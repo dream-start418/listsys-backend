@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 Int       @id @default(autoincrement())
+  name               String
+  email              String    @unique
+  phone              String    @default("")
+  password           String
+  passwordResetToken String    @default("")
+  role               Int       @default(0)
+  planId             Int       @default(0)
+  createdAt          DateTime  @default(now())
+  requests           Request[] @relation("UserRequests") // Relation with requests
+  requestsBlue       RequestBlue[] @relation("UserRequestBlues")
+  requestsYellow     RequestYellow[] @relation("UserRequestYellows")
+  requestsPink       RequestPink[] @relation("UserRequestPinks")
+  requestsRed        RequestRed[] @relation("UserRequestReds")
+  clientCost         CostClient? @relation("UserCostClient")
+
+  // Relation with Client (Optional)
+  contractId         String?   @unique
+  client             Client?   @relation(fields: [contractId], references: [contractId])
+}
+
+model Client {
+  id              Int      @id @default(autoincrement())
+  contractId      String   @unique
+  memo            String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User?    // Optional relation with User
+}
+
+model Request {
+  id            Int      @id @default(autoincrement())
+  requestRandId String   @unique
+  projectName   String
+  wishNum       Int     @default(0)
+  mainCondition Json
+  subCondition  Json
+  areaSelection Json
+  areaMemo      String
+  completeState Int
+  cancelState   Int      @default(0)
+  userId        Int
+  user          User     @relation("UserRequests", fields: [userId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt @default(now())
+  requestAt     DateTime? // Made optional
+  deliveryAt    DateTime?
+  filePath      String?  @default("")// File path of the uploaded CSV
+  fileName      String?  @default("")// File path of the uploaded CSV
+  listCount     Int      @default(0)
+}
+
+model RequestBlue {
+  id            Int      @id @default(autoincrement())
+  requestRandId String   @unique
+  projectName   String
+  wishNum       Int     @default(0)
+  tags  String[]  @default([])
+  detailCondition Json
+  areaSelection Json
+  areaMemo      String
+  completeState Int
+  cancelState   Int      @default(0)
+  userId        Int
+  user          User     @relation("UserRequestBlues", fields: [userId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt @default(now())
+  requestAt     DateTime? // Made optional
+  deliveryAt    DateTime?
+  filePath      String?  @default("")// File path of the uploaded CSV
+  fileName      String?  @default("")// File path of the uploaded CSV
+  listCount     Int      @default(0)
+}
+
+model RequestYellow {
+  id            Int      @id @default(autoincrement())
+  requestRandId String   @unique
+  projectName   String
+  wishNum       Int     @default(0)
+  portalSite    String
+  areaSelection Json
+  areaMemo      String
+  completeState Int
+  cancelState   Int      @default(0)
+  userId        Int
+  user          User     @relation("UserRequestYellows", fields: [userId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt @default(now())
+  requestAt     DateTime? // Made optional
+  deliveryAt    DateTime?
+  filePath      String?  @default("")// File path of the uploaded CSV
+  fileName      String?  @default("")// File path of the uploaded CSV
+  listCount     Int      @default(0)
+}
+
+model RequestPink {
+  id            Int      @id @default(autoincrement())
+  requestRandId String   @unique
+  projectName   String
+  wishNum       Int     @default(0)
+  areaSelection Json
+  areaMemo      String
+  completeState Int
+  cancelState   Int      @default(0)
+  userId        Int
+  user          User     @relation("UserRequestPinks", fields: [userId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt @default(now())
+  requestAt     DateTime? // Made optional
+  deliveryAt    DateTime?
+  filePath      String?  @default("")// File path of the uploaded CSV
+  fileName      String?  @default("")
+  listCount     Int      @default(0)
+}
+
+model RequestRed {
+  id            Int      @id @default(autoincrement())
+  requestRandId String   @unique
+  projectName   String
+  wishNum       Int     @default(0)
+  workSelection Json
+  areaSelection Json
+  areaMemo      String
+  completeState Int
+  cancelState   Int      @default(0)
+  userId        Int
+  user          User     @relation("UserRequestReds", fields: [userId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt @default(now())
+  requestAt     DateTime?
+  deliveryAt    DateTime?
+  filePath      String?  @default("")
+  fileName      String?  @default("")
+  listCount     Int      @default(0)
+}
+
+model RedStoreItem {
+  id            Int       @id @default(autoincrement())
+  company       String
+  url           String
+  category      String
+  phone         String
+  address       String
+  postNum       String
+  fax           String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt @default(now())
+}
+
+model CostClient {
+  id Int @id @default(autoincrement())
+  red_price Int
+  blue_price Int
+  green_price Int
+  yellow_price Int
+  pink_price Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
+  user          User     @relation("UserCostClient", fields: [userId], references: [id])
+  userId        Int @unique
+}
