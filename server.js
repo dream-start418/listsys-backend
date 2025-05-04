@@ -8,6 +8,7 @@ const multer = require("multer");
 const csvParser = require("csv-parser");
 const iconv = require("iconv-lite");
 const path = require("path");
+const Chatwork = require("./chatwork");
 
 require("dotenv").config();
 const cors = require("cors");
@@ -958,6 +959,41 @@ app.post("/api/add_request_red", async (req, res) => {
     let deliveryAt = null;
     if (red_list_count > 0) {
       deliveryAt = new Date();
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        try {
+          const chatwork = new Chatwork(chatworkClient.chatwork_token);
+          const workSelectionText = Object.entries(tp_workSelection)
+            .map(([category, items]) => `${category}: ${items.join(', ')}`)
+            .join('\n');
+          
+          await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+クライアント名：${projectName}
+リスト区分：
+${workSelectionText}
+`);
+        } catch (error) {
+          console.error('Failed to send Chatwork notification:', error);
+        }
+      }
+    } else {
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        try {
+          const chatwork = new Chatwork(chatworkClient.chatwork_token);
+          await chatwork.sendMessage(chatworkClient.room_id, `レッドリストの依頼があります。`);
+        } catch (error) {
+          console.error('Failed to send Chatwork notification:', error);
+        }
+      }
     }
 
     const newRequestRed = await prisma.requestRed.create({
@@ -1633,6 +1669,54 @@ app.put("/api/update_request_red/:id", async (req, res) => {
   if (completeState == 1) {
     requestAt = new Date();
   }
+  const redStoreItems = await prisma.redStoreItem.findMany();
+  let red_list_count = 0;
+
+  const tp_areaSelection = areaSelection;
+  const tp_workSelection = workSelection;
+  // let i=0;
+  Object.keys(tp_areaSelection).forEach((areaKey) => {
+    tp_areaSelection[areaKey].forEach((area) => {
+      Object.keys(tp_workSelection).forEach((categoryKey) => {
+        tp_workSelection[categoryKey].forEach((item) => {
+          redStoreItems.forEach((redItem) => {
+            if (
+              redItem.category === item &&
+              redItem.address.includes(area.trim())
+            ) {
+              red_list_count++;
+            }
+          });
+        });
+      });
+    });
+  });
+
+  let deliveryAt = null;
+  if (red_list_count > 0) {
+    deliveryAt = new Date();
+    const chatworkClient = await prisma.chatworkClient.findFirst({
+      where: {
+        userId: 1,
+      },
+    });
+    if (chatworkClient) {
+      try {
+        const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        const workSelectionText = Object.entries(tp_workSelection)
+          .map(([category, items]) => `${category}: ${items.join(', ')}`)
+          .join('\n');
+        
+        await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+クライアント名：${projectName}
+リスト区分：
+${workSelectionText}
+`);
+      } catch (error) {
+        console.error('Failed to send Chatwork notification:', error);
+      }
+    }
+  }
   try {
     const updatedRequestRed = await prisma.requestRed.update({
       where: { id: parseInt(id, 10) },
@@ -2152,7 +2236,7 @@ app.post("/api/update_client_cost", async (req, res) => {
     if (!user || user.role === 0) {
       return res
         .status(403)
-        .json({ message: "Access denied. Insufficient permissions." });
+        .json({ message: "管理者権限が必要です" });
     }
 
     const {
@@ -2256,6 +2340,117 @@ app.get("/api/client_cost", async (req, res) => {
       return res.status(401).json({ message: "Token expired." });
     }
     return res.status(500).json({ message: "Internal server error." });
+  }
+});
+
+app.get("/api/admin/settings/chatwork/get", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "Authorization token required." });
+    }
+
+    // Verify the token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (!decoded) {
+      return res.status(401).json({ message: "Invalid token." });
+    }
+
+    // Check if the user has the required role
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+    });
+    if (!user || user.role === 0) {
+      return res.status(403).json({ message: "管理者権限が必要です" });
+    }
+
+    // Get the Chatwork settings for the user
+    const chatworkSettings = await prisma.chatworkClient.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (!chatworkSettings) {
+      return res.status(200).json({
+        chatworkToken: "",
+        chatworkRoomId: ""
+      });
+    }
+
+    return res.status(200).json({
+      chatworkToken: chatworkSettings.chatwork_token,
+      chatworkRoomId: chatworkSettings.room_id
+    });
+  } catch (error) {
+    console.error("Error fetching chatwork settings:", error);
+    if (error.name === "JsonWebTokenError") {
+      return res.status(401).json({ message: "Invalid token." });
+    }
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token expired." });
+    }
+    return res.status(500).json({ error: "Failed to fetch chatwork settings" });
+  }
+});
+
+app.post("/api/admin/settings/chatwork/save", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "Authorization token required." });
+    }
+
+    // Verify the token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (!decoded) {
+      return res.status(401).json({ message: "Invalid token." });
+    }
+
+    // Check if the user has the required role
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+    });
+
+    if (!user || user.role === 0) {
+      return res.status(403).json({ message: "管理者権限が必要です" });
+    }
+
+    const { chatworkToken, chatworkRoomId } = req.body;
+
+    // Check if chatwork settings already exist for this user
+    const existingSettings = await prisma.chatworkClient.findUnique({
+      where: { userId: user.id },
+    });
+
+    if (existingSettings) {
+      // Update existing settings
+      await prisma.chatworkClient.update({
+        where: { userId: user.id },
+        data: {
+          chatwork_token: chatworkToken,
+          room_id: chatworkRoomId,
+        },
+      });
+    } else {
+      // Create new settings
+      await prisma.chatworkClient.create({
+        data: {
+          userId: user.id,
+          chatwork_token: chatworkToken,
+          room_id: chatworkRoomId,
+        },
+      });
+    }
+
+    return res.status(200).json({ message: "Chatwork settings saved successfully" });
+  } catch (error) {
+    console.error("Error saving chatwork settings:", error);
+    if (error.name === "JsonWebTokenError") {
+      return res.status(401).json({ message: "Invalid token." });
+    }
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token expired." });
+    }
+    return res.status(500).json({ error: "Failed to save chatwork settings" });
   }
 });
 

@@ -23,6 +23,7 @@ model User {
   requestsPink       RequestPink[] @relation("UserRequestPinks")
   requestsRed        RequestRed[] @relation("UserRequestReds")
   clientCost         CostClient? @relation("UserCostClient")
+  chatworkClient     ChatworkClient? @relation("UserChatworkClient")
 
   // Relation with Client (Optional)
   contractId         String?   @unique
@@ -168,4 +169,14 @@ model CostClient {
   updatedAt DateTime @updatedAt @default(now())
   user          User     @relation("UserCostClient", fields: [userId], references: [id])
   userId        Int @unique
+}
+
+model ChatworkClient {
+  id Int @id @default(autoincrement())
+  room_id String
+  chatwork_token String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
+  user User    @relation("UserChatworkClient", fields: [userId], references: [id])
+  userId  Int  @unique
 }
