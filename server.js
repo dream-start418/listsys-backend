@@ -680,6 +680,18 @@ app.post("/api/add_request", async (req, res) => {
     let requestAt = null;
     if (completeState == 1) {
       requestAt = new Date();
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        await chatwork.sendMessage(chatworkClient.room_id, `グリーンリストの依頼があります。
+クライアント名：${projectName}
+リスト区分：グリーン
+`);
+      }
     }
     // Insert the new request into the database
     const newRequest = await prisma.request.create({
@@ -745,6 +757,18 @@ app.post("/api/add_request_blue", async (req, res) => {
     let requestAt = null;
     if (completeState == 1) {
       requestAt = new Date();
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        await chatwork.sendMessage(chatworkClient.room_id, `ブルーリストの依頼があります。
+クライアント名：${projectName}
+リスト区分：ブルー
+`);
+      }
     }
     // Insert the new request into the database
     const newRequestBlue = await prisma.requestBlue.create({
@@ -809,6 +833,18 @@ app.post("/api/add_request_yellow", async (req, res) => {
     let requestAt = null;
     if (completeState == 1) {
       requestAt = new Date();
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        await chatwork.sendMessage(chatworkClient.room_id, `イエローリストの依頼があります。
+クライアント名：${projectName}
+リスト区分：イエロー
+`);
+      }
     }
     // Insert the new request into the database
     const newRequestYellow = await prisma.requestYellow.create({
@@ -871,6 +907,18 @@ app.post("/api/add_request_pink", async (req, res) => {
     let requestAt = null;
     if (completeState == 1) {
       requestAt = new Date();
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        await chatwork.sendMessage(chatworkClient.room_id, `ピンクリストの依頼があります。
+クライアント名：${projectName}
+リスト区分：ピンク
+`);
+      }
     }
     // Insert the new request into the database
     const newRequestPink = await prisma.requestPink.create({
@@ -965,20 +1013,20 @@ app.post("/api/add_request_red", async (req, res) => {
         },
       });
       if (chatworkClient) {
-        try {
-          const chatwork = new Chatwork(chatworkClient.chatwork_token);
-          const workSelectionText = Object.entries(tp_workSelection)
-            .map(([category, items]) => `${category}: ${items.join(', ')}`)
-            .join('\n');
+//         try {
+//           const chatwork = new Chatwork(chatworkClient.chatwork_token);
+//           const workSelectionText = Object.entries(tp_workSelection)
+//             .map(([category, items]) => `${category}: ${items.join(', ')}`)
+//             .join('\n');
           
-          await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
-クライアント名：${projectName}
-リスト区分：
-${workSelectionText}
-`);
-        } catch (error) {
-          console.error('Failed to send Chatwork notification:', error);
-        }
+//           await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+// クライアント名：${projectName}
+// リスト区分：
+// ${workSelectionText}
+// `);
+//         } catch (error) {
+//           console.error('Failed to send Chatwork notification:', error);
+//         }
       }
     } else {
       const chatworkClient = await prisma.chatworkClient.findFirst({
@@ -1495,6 +1543,18 @@ app.put("/api/update_request/:id", async (req, res) => {
   let requestAt = null;
   if (completeState == 1) {
     requestAt = new Date();
+    const chatworkClient = await prisma.chatworkClient.findFirst({
+      where: {
+        userId: 1,
+      },
+    });
+    if (chatworkClient) {
+      const chatwork = new Chatwork(chatworkClient.chatwork_token);
+      await chatwork.sendMessage(chatworkClient.room_id, `グリーンリストの依頼があります。
+クライアント名：${projectName}
+リスト区分：グリーン
+`);
+    }
   }
   try {
     const updatedRequest = await prisma.request.update({
@@ -1538,6 +1598,18 @@ app.put("/api/update_request_pink/:id", async (req, res) => {
   let requestAt = null;
   if (completeState == 1) {
     requestAt = new Date();
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        await chatwork.sendMessage(chatworkClient.room_id, `ピンクリストの依頼があります。
+クライアント名：${projectName}
+リスト区分：ピンク
+`);
+      }
   }
   try {
     const updatedRequestPink = await prisma.requestPink.update({
@@ -1580,6 +1652,18 @@ app.put("/api/update_request_yellow/:id", async (req, res) => {
   let requestAt = null;
   if (completeState == 1) {
     requestAt = new Date();
+    const chatworkClient = await prisma.chatworkClient.findFirst({
+      where: {
+        userId: 1,
+      },
+    });
+    if (chatworkClient) {
+      const chatwork = new Chatwork(chatworkClient.chatwork_token);
+      await chatwork.sendMessage(chatworkClient.room_id, `イエローリストの依頼があります。
+クライアント名：${projectName}
+リスト区分：イエロー
+`);
+    }
   }
   try {
     const updatedRequestYellow = await prisma.requestYellow.update({
@@ -1624,6 +1708,18 @@ app.put("/api/update_request_blue/:id", async (req, res) => {
   let requestAt = null;
   if (completeState == 1) {
     requestAt = new Date();
+    const chatworkClient = await prisma.chatworkClient.findFirst({
+      where: {
+        userId: 1,
+      },
+    });
+    if (chatworkClient) {
+      const chatwork = new Chatwork(chatworkClient.chatwork_token);
+      await chatwork.sendMessage(chatworkClient.room_id, `ブルーリストの依頼があります。
+クライアント名：${projectName}
+リスト区分：ブルー
+`);
+    }
   }
   try {
     const updatedRequestBlue = await prisma.requestBlue.update({
