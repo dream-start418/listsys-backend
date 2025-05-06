@@ -9,6 +9,8 @@ const csvParser = require("csv-parser");
 const iconv = require("iconv-lite");
 const path = require("path");
 const Chatwork = require("./chatwork");
+const AdmZip = require("adm-zip");
+const xlsx = require("xlsx");
 
 require("dotenv").config();
 const cors = require("cors");
@@ -34,8 +36,9 @@ const {
 const upload = multer({
   dest: "uploads/", // Destination folder for uploads
   fileFilter: (req, file, cb) => {
-    if (path.extname(file.originalname) !== ".csv") {
-      return cb(new Error("Only .csv files are allowed"), false);
+    const allowedExt = [".csv", ".xlsx", ".zip"];
+    if (!allowedExt.includes(path.extname(file.originalname).toLowerCase())) {
+      return cb(new Error("Only .csv, .xlsx, and .zip files are allowed"), false);
     }
     cb(null, true);
   },
@@ -2043,93 +2046,125 @@ app.post("/api/upload-csv-file", upload.single("file"), async (req, res) => {
   try {
     fileName = Buffer.from(req.file.originalname, "binary").toString("utf-8");
   } catch (error) {
-    console.warn("Error decoding file name, using as is:", error);
+    fileName = req.file.originalname;
   }
 
   const filePath = req.file.path;
   let rowCount = 0;
 
-  // Parse CSV file to count rows
   try {
-    await new Promise((resolve, reject) => {
-      fs.createReadStream(filePath)
-        .pipe(csvParser())
-        .on("data", () => rowCount++)
-        .on("end", resolve)
-        .on("error", reject);
-    });
-    const deliveryAt = new Date();
+    const ext = path.extname(fileName).toLowerCase();
 
+    if (ext === ".zip") {
+      // --- ZIP: extract and count rows in all .csv and .xlsx files ---
+      const zip = new AdmZip(filePath);
+      const zipEntries = zip.getEntries();
+
+      for (const entry of zipEntries) {
+        if (entry.isDirectory) continue;
+        const entryExt = path.extname(entry.entryName).toLowerCase();
+
+        // CSV
+        if (entryExt === ".csv") {
+          const csvData = entry.getData();
+          // Write to temp file for csv-parser
+          const tempPath = filePath + "_tmp.csv";
+          fs.writeFileSync(tempPath, csvData);
+          await new Promise((resolve, reject) => {
+            fs.createReadStream(tempPath)
+              .pipe(csvParser())
+              .on("data", () => rowCount++)
+              .on("end", resolve)
+              .on("error", reject);
+          });
+          fs.unlinkSync(tempPath);
+        }
+        // XLSX
+        else if (entryExt === ".xlsx") {
+          const xlsxData = entry.getData();
+          // Write to temp file for xlsx
+          const tempPath = filePath + "_tmp.xlsx";
+          fs.writeFileSync(tempPath, xlsxData);
+          const workbook = xlsx.readFile(tempPath);
+          workbook.SheetNames.forEach((sheetName) => {
+            const sheet = workbook.Sheets[sheetName];
+            const json = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+            // Remove header row if present
+            if (json.length > 1) {
+              rowCount += json.length - 1;
+            } else if (json.length === 1) {
+              // Only header, no data
+            }
+          });
+          fs.unlinkSync(tempPath);
+        }
+      }
+    } else {
+      // --- Not ZIP: use frontend's listCount ---
+      rowCount = parseInt(req.body.listCount, 10) || 0;
+    }
+
+    const deliveryAt = new Date();
     let updatedRequest;
     if (req.body.category === "Green") {
       updatedRequest = await prisma.request.update({
         where: { id: parseInt(req.body.requestId, 10) },
         data: {
-          filePath: filePath, // Save the file path
-          fileName: fileName, // Save the file name
-          listCount: rowCount, // Save the row count
+          filePath: filePath,
+          fileName: fileName,
+          listCount: rowCount,
           completeState: 2,
           deliveryAt: deliveryAt,
         },
-        include: {
-          user: true, // Include related user information
-        },
+        include: { user: true },
       });
     } else if (req.body.category === "Pink") {
       updatedRequest = await prisma.requestPink.update({
         where: { id: parseInt(req.body.requestId, 10) },
         data: {
-          filePath: filePath, // Save the file path
-          fileName: fileName, // Save the file name
-          listCount: rowCount, // Save the row count
+          filePath: filePath,
+          fileName: fileName,
+          listCount: rowCount,
           completeState: 2,
           deliveryAt: deliveryAt,
         },
-        include: {
-          user: true, // Include related user information
-        },
+        include: { user: true },
       });
     } else if (req.body.category === "Blue") {
       updatedRequest = await prisma.requestBlue.update({
         where: { id: parseInt(req.body.requestId, 10) },
         data: {
-          filePath: filePath, // Save the file path
-          fileName: fileName, // Save the file name
-          listCount: rowCount, // Save the row count
+          filePath: filePath,
+          fileName: fileName,
+          listCount: rowCount,
           completeState: 2,
           deliveryAt: deliveryAt,
         },
-        include: {
-          user: true, // Include related user information
-        },
+        include: { user: true },
       });
     } else if (req.body.category === "Yellow") {
       updatedRequest = await prisma.requestYellow.update({
         where: { id: parseInt(req.body.requestId, 10) },
         data: {
-          filePath: filePath, // Save the file path
-          fileName: fileName, // Save the file name
-          listCount: rowCount, // Save the row count
+          filePath: filePath,
+          fileName: fileName,
+          listCount: rowCount,
           completeState: 2,
           deliveryAt: deliveryAt,
         },
-        include: {
-          user: true, // Include related user information
-        },
+        include: { user: true },
       });
     } else if (req.body.category === "Red") {
       updatedRequest = await prisma.requestRed.update({
         where: { id: parseInt(req.body.requestId, 10) },
         data: {
-          filePath: filePath, // Save the file path
-          fileName: fileName, // Save the file name
-          listCount: rowCount, // Save the row count
+          filePath: filePath,
+          fileName: fileName,
+          listCount: rowCount,
           completeState: 2,
           deliveryAt: deliveryAt,
         },
-        include: {
-          user: true, // Include related user information
-        },
+        include: { user: true },
       });
     } else {
       return res.status(400).json({ error: "Invalid category" });
@@ -2140,8 +2175,8 @@ app.post("/api/upload-csv-file", upload.single("file"), async (req, res) => {
       updatedRequest: updatedRequest,
     });
   } catch (error) {
-    console.error("Error processing CSV file:", error);
-    return res.status(500).json({ error: "Failed to process CSV file" });
+    console.error("Error processing file:", error);
+    return res.status(500).json({ error: "Failed to process file" });
   }
 });
 
