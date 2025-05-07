@@ -688,12 +688,17 @@ app.post("/api/add_request", async (req, res) => {
           userId: 1,
         },
       });
+      const client = await prisma.user.findFirst({
+        where: {
+          id: userId,
+        },
+      });
       if (chatworkClient) {
         const chatwork = new Chatwork(chatworkClient.chatwork_token);
-        await chatwork.sendMessage(chatworkClient.room_id, `グリーンリストの依頼があります。
-クライアント名：${projectName}
+        await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+クライアント名：${client.name}
 リスト区分：グリーン
-`);
+        `);
       }
     }
     // Insert the new request into the database
@@ -765,10 +770,15 @@ app.post("/api/add_request_blue", async (req, res) => {
           userId: 1,
         },
       });
+      const client = await prisma.user.findFirst({
+        where: {
+          id: userId,
+        },
+      });
       if (chatworkClient) {
         const chatwork = new Chatwork(chatworkClient.chatwork_token);
-        await chatwork.sendMessage(chatworkClient.room_id, `ブルーリストの依頼があります。
-クライアント名：${projectName}
+        await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+クライアント名：${client.name}
 リスト区分：ブルー
 `);
       }
@@ -841,10 +851,15 @@ app.post("/api/add_request_yellow", async (req, res) => {
           userId: 1,
         },
       });
+      const client = await prisma.user.findFirst({
+        where: {
+          id: userId,
+        },
+      });
       if (chatworkClient) {
         const chatwork = new Chatwork(chatworkClient.chatwork_token);
-        await chatwork.sendMessage(chatworkClient.room_id, `イエローリストの依頼があります。
-クライアント名：${projectName}
+        await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+クライアント名：${client.name}
 リスト区分：イエロー
 `);
       }
@@ -915,10 +930,15 @@ app.post("/api/add_request_pink", async (req, res) => {
           userId: 1,
         },
       });
+      const client = await prisma.user.findFirst({
+        where: {
+          id: userId,
+        },
+      });
       if (chatworkClient) {
         const chatwork = new Chatwork(chatworkClient.chatwork_token);
-        await chatwork.sendMessage(chatworkClient.room_id, `ピンクリストの依頼があります。
-クライアント名：${projectName}
+        await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+クライアント名：${client.name}
 リスト区分：ピンク
 `);
       }
@@ -1544,21 +1564,6 @@ app.put("/api/update_request/:id", async (req, res) => {
     cancelState = 0,
   } = req.body;
   let requestAt = null;
-  if (completeState == 1) {
-    requestAt = new Date();
-    const chatworkClient = await prisma.chatworkClient.findFirst({
-      where: {
-        userId: 1,
-      },
-    });
-    if (chatworkClient) {
-      const chatwork = new Chatwork(chatworkClient.chatwork_token);
-      await chatwork.sendMessage(chatworkClient.room_id, `グリーンリストの依頼があります。
-クライアント名：${projectName}
-リスト区分：グリーン
-`);
-    }
-  }
   try {
     const updatedRequest = await prisma.request.update({
       where: { id: parseInt(id, 10) },
@@ -1578,6 +1583,21 @@ app.put("/api/update_request/:id", async (req, res) => {
         user: true, // Include the related user data
       },
     });
+    if (completeState == 1) {
+      requestAt = new Date();
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+クライアント名：${updatedRequest.user.name}
+リスト区分：グリーン
+`);
+      }
+    }
     res.status(200).json(updatedRequest);
   } catch (error) {
     console.error("Error updating request:", error);
@@ -1599,21 +1619,6 @@ app.put("/api/update_request_pink/:id", async (req, res) => {
     cancelState = 0,
   } = req.body;
   let requestAt = null;
-  if (completeState == 1) {
-    requestAt = new Date();
-      const chatworkClient = await prisma.chatworkClient.findFirst({
-        where: {
-          userId: 1,
-        },
-      });
-      if (chatworkClient) {
-        const chatwork = new Chatwork(chatworkClient.chatwork_token);
-        await chatwork.sendMessage(chatworkClient.room_id, `ピンクリストの依頼があります。
-クライアント名：${projectName}
-リスト区分：ピンク
-`);
-      }
-  }
   try {
     const updatedRequestPink = await prisma.requestPink.update({
       where: { id: parseInt(id, 10) },
@@ -1631,6 +1636,21 @@ app.put("/api/update_request_pink/:id", async (req, res) => {
         user: true, // Include the related user data
       },
     });
+    if (completeState == 1) {
+        requestAt = new Date();
+          const chatworkClient = await prisma.chatworkClient.findFirst({
+            where: {
+              userId: 1,
+            },
+          });
+          if (chatworkClient) {
+            const chatwork = new Chatwork(chatworkClient.chatwork_token);
+            await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+クライアント名：${updatedRequestPink.user.name}
+リスト区分：ピンク
+`);
+          }
+      }
     res.status(200).json(updatedRequestPink);
   } catch (error) {
     console.error("Error updating request:", error);
@@ -1653,21 +1673,6 @@ app.put("/api/update_request_yellow/:id", async (req, res) => {
     cancelState = 0,
   } = req.body;
   let requestAt = null;
-  if (completeState == 1) {
-    requestAt = new Date();
-    const chatworkClient = await prisma.chatworkClient.findFirst({
-      where: {
-        userId: 1,
-      },
-    });
-    if (chatworkClient) {
-      const chatwork = new Chatwork(chatworkClient.chatwork_token);
-      await chatwork.sendMessage(chatworkClient.room_id, `イエローリストの依頼があります。
-クライアント名：${projectName}
-リスト区分：イエロー
-`);
-    }
-  }
   try {
     const updatedRequestYellow = await prisma.requestYellow.update({
       where: { id: parseInt(id, 10) },
@@ -1686,6 +1691,21 @@ app.put("/api/update_request_yellow/:id", async (req, res) => {
         user: true, // Include the related user data
       },
     });
+    if (completeState == 1) {
+      requestAt = new Date();
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+クライアント名：${updatedRequestYellow.user.name}
+リスト区分：イエロー
+`);
+      }
+    }
     res.status(200).json(updatedRequestYellow);
   } catch (error) {
     console.error("Error updating request:", error); // Log the error
@@ -1709,21 +1729,6 @@ app.put("/api/update_request_blue/:id", async (req, res) => {
     cancelState = 0,
   } = req.body;
   let requestAt = null;
-  if (completeState == 1) {
-    requestAt = new Date();
-    const chatworkClient = await prisma.chatworkClient.findFirst({
-      where: {
-        userId: 1,
-      },
-    });
-    if (chatworkClient) {
-      const chatwork = new Chatwork(chatworkClient.chatwork_token);
-      await chatwork.sendMessage(chatworkClient.room_id, `ブルーリストの依頼があります。
-クライアント名：${projectName}
-リスト区分：ブルー
-`);
-    }
-  }
   try {
     const updatedRequestBlue = await prisma.requestBlue.update({
       where: { id: parseInt(id, 10) },
@@ -1743,6 +1748,21 @@ app.put("/api/update_request_blue/:id", async (req, res) => {
         user: true, // Include the related user data
       },
     });
+    if (completeState == 1) {
+      requestAt = new Date();
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+クライアント名：${updatedRequestBlue.user.name}
+リスト区分：ブルー
+`);
+      }
+    }
     res.status(200).json(updatedRequestBlue);
   } catch (error) {
     console.error("Error updating request:", error);
@@ -1800,19 +1820,33 @@ app.put("/api/update_request_red/:id", async (req, res) => {
       },
     });
     if (chatworkClient) {
-      try {
-        const chatwork = new Chatwork(chatworkClient.chatwork_token);
-        const workSelectionText = Object.entries(tp_workSelection)
-          .map(([category, items]) => `${category}: ${items.join(', ')}`)
-          .join('\n');
+//       try {
+//         const chatwork = new Chatwork(chatworkClient.chatwork_token);
+//         const workSelectionText = Object.entries(tp_workSelection)
+//           .map(([category, items]) => `${category}: ${items.join(', ')}`)
+//           .join('\n');
         
-        await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
-クライアント名：${projectName}
-リスト区分：
-${workSelectionText}
-`);
-      } catch (error) {
-        console.error('Failed to send Chatwork notification:', error);
+//         await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+// クライアント名：${projectName}
+// リスト区分：
+// ${workSelectionText}
+// `);
+//       } catch (error) {
+//         console.error('Failed to send Chatwork notification:', error);
+//       }
+    } else {
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        try {
+          const chatwork = new Chatwork(chatworkClient.chatwork_token);
+          await chatwork.sendMessage(chatworkClient.room_id, `レッドリストの依頼があります。`);
+        } catch (error) {
+          console.error('Failed to send Chatwork notification:', error);
+        }
       }
     }
   }
@@ -2231,7 +2265,6 @@ app.post("/api/upload-red-file", upload.single("file"), async (req, res) => {
         .on("end", () => resolve(records))
         .on("error", reject);
     });
-    // console.log(records.length);
     let i = 0;
     for (const record of records) {
       let correctedRecord = {};
