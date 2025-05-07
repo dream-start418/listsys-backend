@@ -2055,54 +2055,54 @@ app.post("/api/upload-csv-file", upload.single("file"), async (req, res) => {
   try {
     const ext = path.extname(fileName).toLowerCase();
 
-    if (ext === ".zip") {
-      // --- ZIP: extract and count rows in all .csv and .xlsx files ---
-      const zip = new AdmZip(filePath);
-      const zipEntries = zip.getEntries();
+    // if (ext === ".zip") {
+    //   // --- ZIP: extract and count rows in all .csv and .xlsx files ---
+    //   const zip = new AdmZip(filePath);
+    //   const zipEntries = zip.getEntries();
 
-      for (const entry of zipEntries) {
-        if (entry.isDirectory) continue;
-        const entryExt = path.extname(entry.entryName).toLowerCase();
+    //   for (const entry of zipEntries) {
+    //     if (entry.isDirectory) continue;
+    //     const entryExt = path.extname(entry.entryName).toLowerCase();
 
-        // CSV
-        if (entryExt === ".csv") {
-          const csvData = entry.getData();
-          // Write to temp file for csv-parser
-          const tempPath = filePath + "_tmp.csv";
-          fs.writeFileSync(tempPath, csvData);
-          await new Promise((resolve, reject) => {
-            fs.createReadStream(tempPath)
-              .pipe(csvParser())
-              .on("data", () => rowCount++)
-              .on("end", resolve)
-              .on("error", reject);
-          });
-          fs.unlinkSync(tempPath);
-        }
-        // XLSX
-        else if (entryExt === ".xlsx") {
-          const xlsxData = entry.getData();
-          // Write to temp file for xlsx
-          const tempPath = filePath + "_tmp.xlsx";
-          fs.writeFileSync(tempPath, xlsxData);
-          const workbook = xlsx.readFile(tempPath);
-          workbook.SheetNames.forEach((sheetName) => {
-            const sheet = workbook.Sheets[sheetName];
-            const json = xlsx.utils.sheet_to_json(sheet, { header: 1 });
-            // Remove header row if present
-            if (json.length > 1) {
-              rowCount += json.length - 1;
-            } else if (json.length === 1) {
-              // Only header, no data
-            }
-          });
-          fs.unlinkSync(tempPath);
-        }
-      }
-    } else {
+    //     // CSV
+    //     if (entryExt === ".csv") {
+    //       const csvData = entry.getData();
+    //       // Write to temp file for csv-parser
+    //       const tempPath = filePath + "_tmp.csv";
+    //       fs.writeFileSync(tempPath, csvData);
+    //       await new Promise((resolve, reject) => {
+    //         fs.createReadStream(tempPath)
+    //           .pipe(csvParser())
+    //           .on("data", () => rowCount++)
+    //           .on("end", resolve)
+    //           .on("error", reject);
+    //       });
+    //       fs.unlinkSync(tempPath);
+    //     }
+    //     // XLSX
+    //     else if (entryExt === ".xlsx") {
+    //       const xlsxData = entry.getData();
+    //       // Write to temp file for xlsx
+    //       const tempPath = filePath + "_tmp.xlsx";
+    //       fs.writeFileSync(tempPath, xlsxData);
+    //       const workbook = xlsx.readFile(tempPath);
+    //       workbook.SheetNames.forEach((sheetName) => {
+    //         const sheet = workbook.Sheets[sheetName];
+    //         const json = xlsx.utils.sheet_to_json(sheet, { header: 1 });
+    //         // Remove header row if present
+    //         if (json.length > 1) {
+    //           rowCount += json.length - 1;
+    //         } else if (json.length === 1) {
+    //           // Only header, no data
+    //         }
+    //       });
+    //       fs.unlinkSync(tempPath);
+    //     }
+    //   }
+    // } else {
       // --- Not ZIP: use frontend's listCount ---
       rowCount = parseInt(req.body.listCount, 10) || 0;
-    }
+    // }
 
     const deliveryAt = new Date();
     let updatedRequest;
