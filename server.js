@@ -1003,6 +1003,70 @@ app.post("/api/add_request_red", async (req, res) => {
     }
     const requestAt = new Date();
 
+    // function deepNormalize(obj) {
+    //   if (Array.isArray(obj)) {
+    //     // Sort array items after deep normalization
+    //     return obj
+    //       .map((item) => deepNormalize(item))
+    //       .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+    //   } else if (obj !== null && typeof obj === 'object') {
+    //     // Recursively sort object keys
+    //     const sortedObj = {};
+    //     Object.keys(obj).sort().forEach((key) => {
+    //       sortedObj[key] = deepNormalize(obj[key]);
+    //     });
+    //     return sortedObj;
+    //   } else {
+    //     // Primitive value
+    //     return obj;
+    //   }
+    // }
+
+    function normalizeObject(obj) {
+      return JSON.stringify(
+        Object.keys(obj)
+          .sort()
+          .reduce((acc, key) => {
+            acc[key] = Array.isArray(obj[key])
+              ? [...obj[key]].sort()
+              : obj[key];
+            return acc;
+          }, {})
+      );
+    }
+
+    function normalizeString(str) {
+      return str
+        .replace(/[（）]/g, '') // Remove full-width and half-width parentheses
+        .replace(/[()]/g, '')   // Remove any remaining parentheses
+        .replace(/\s+/g, '')    // Remove whitespace
+        .toLowerCase();        // Convert to lowercase for case-insensitive comparison
+    }
+
+    // const normalizedArea = JSON.stringify(deepNormalize(areaSelection));
+    // const normalizedWork = JSON.stringify(deepNormalize(workSelection));
+
+    const normalizedArea = normalizeObject(areaSelection);
+    const normalizedWork = normalizeObject(workSelection);
+
+    // Get all requests for the user and check for duplicate
+    const existingRequests = await prisma.requestRed.findMany({
+      where: { userId },
+    });
+    
+    const isDuplicate = existingRequests.some((item) => {
+      return (
+        normalizeObject(item.areaSelection) === normalizedArea &&
+        normalizeObject(item.workSelection) === normalizedWork
+      );
+    });
+
+    if (isDuplicate) {
+      return res.status(202).json({
+        error: "同じエリアと作業選択を持つリクエストがすでに存在します。",
+      });
+    }
+
     const redItems = [];
     const redStoreItems = await prisma.redStoreItem.findMany();
     let red_list_count = 0;
@@ -1149,27 +1213,40 @@ app.get("/api/requestLists", async (req, res) => {
     const redStoreItems = await prisma.redStoreItem.findMany();
 
     requestsRed.forEach((request) => {
-      redItems.length = 0;
+      const redItems = [];
+      let totalRequestedItems = 0;
+      let registeredItems = 0;
+      
       const tp_areaSelection = request.areaSelection;
       const tp_workSelection = request.workSelection;
+      
       Object.keys(tp_areaSelection).forEach((areaKey) => {
         tp_areaSelection[areaKey].forEach((area) => {
           Object.keys(tp_workSelection).forEach((categoryKey) => {
             tp_workSelection[categoryKey].forEach((item) => {
-              redStoreItems.forEach((redItem) => {
-                if (
-                  redItem.category === item &&
-                  redItem.address.includes(area.trim())
-                ) {
-                  redItems.push(redItem);
-                }
-              });
+              totalRequestedItems++; // Count every requested combination
+              
+              const foundItem = redStoreItems.find((redItem) => 
+                redItem.category === item &&
+                redItem.address.includes(area.trim())
+              );
+              
+              if (foundItem) {
+                registeredItems++; // Count registered items
+                redItems.push(foundItem);
+              }
             });
           });
         });
       });
-      if (redItems.length > 0) {
+      
+      // Only set completeState = 2 if ALL requested items are registered
+      if (totalRequestedItems > 0 && registeredItems === totalRequestedItems) {
         request.completeState = 2;
+        request.listCount = redItems.length;
+      } else if (registeredItems > 0) {
+        // Some items are registered but not all - keep original completeState
+        // This prevents download but shows the request exists
         request.listCount = redItems.length;
       }
     });
@@ -1527,6 +1604,7 @@ app.post("/api/requestLists_red", async (req, res) => {
                   redItem.address.includes(area.trim())
               );
               redItems.push({
+                // requestId: request.id,
                 bigCategory: categoryKey,
                 smallCategory: item,
                 area: area,
@@ -1541,7 +1619,55 @@ app.post("/api/requestLists_red", async (req, res) => {
       });
     });
 
+    // async function removeDuplicates() {
+    //   const allItems = await prisma.redStoreItem.findMany();
+    
+    //   const seen = new Map();
+    //   const idsToKeep = new Set();
+    
+    //   for (const item of allItems) {
+    //     const key = `${item.category}||${item.address}`;
+    //     if (!seen.has(key)) {
+    //       seen.set(key, item.id);
+    //       idsToKeep.add(item.id);
+    //     }
+    //   }
+    
+    //   const idsToDelete = allItems
+    //     .filter((item) => !idsToKeep.has(item.id))
+    //     .map((item) => item.id);
+    
+    //   if (idsToDelete.length > 0) {
+    //     await prisma.redStoreItem.deleteMany({
+    //       where: {
+    //         id: { in: idsToDelete },
+    //       },
+    //     });
+    //     console.log(`Deleted ${idsToDelete.length} duplicate items.`);
+    //   } else {
+    //     console.log('No duplicates found to delete.');
+    //   }
+    // }
+    // await removeDuplicates();
+
     res.status(200).json({ redItems });
+    // const unregisteredItems = redItems.filter((item) => item.state === "未登録");
+
+    // // Delete corresponding requestRed entries from DB
+    // if (unregisteredItems.length > 0) {
+    //   await prisma.requestRed.deleteMany({
+    //     where: {
+    //       id: {
+    //         in: unregisteredItems.map((i) => i.requestId),
+    //       },
+    //     },
+    //   });
+    // }
+
+    // res.status(200).json({ 
+    //   deletedCount: unregisteredItems.length,
+    //   redItems
+    // });
   } catch (error) {
     console.error("Error fetching requests:", error);
     res
@@ -2266,6 +2392,8 @@ app.post("/api/upload-red-file", upload.single("file"), async (req, res) => {
         .on("error", reject);
     });
     let i = 0;
+    let skippedDuplicates = 0;
+    let skippedInvalid = 0;
     for (const record of records) {
       let correctedRecord = {};
       Object.entries(record).forEach(([key, value], index) => {
@@ -2303,12 +2431,24 @@ app.post("/api/upload-red-file", upload.single("file"), async (req, res) => {
         }, // Assuming 'url' is the unique column
       });
       if (existingItem) {
-        return res
-          .status(201)
-          .json({ message: "データはすでに保存されています。" });
+        // return res
+        //   .status(201)
+        //   .json({ message: "データはすでに保存されています。" });
+        skippedDuplicates++;
+        continue;
       }
-      const checkValueInOptions = (data, value) =>
-        data.some((item) => item.options.includes(value));
+      const checkValueInOptions = (data, value) => {
+        // Normalize the input value by replacing ㆍ with ・
+        const normalizedValue = value.replace(/ㆍ/g, '・');
+        
+        return data.some((item) => 
+          item.options.some(option => {
+            // Normalize each option by replacing ㆍ with ・
+            const normalizedOption = option.replace(/ㆍ/g, '・');
+            return normalizedOption === normalizedValue;
+          })
+        );
+      };
 
       if (
         !(
@@ -2319,60 +2459,78 @@ app.post("/api/upload-red-file", upload.single("file"), async (req, res) => {
           checkValueInOptions(requestGroupCheckData5, mappedRecord["category"])
         )
       ) {
-        return res.status(201).json({
-          message:
-            "データはすでに保存されています。 " +
-            mappedRecord["prefecture"] +
-            " : " +
-            mappedRecord["category"],
-        });
+        skippedInvalid++;
+        continue;
+        // return res.status(201).json({
+        //   message:
+        //     "データはすでに保存されています。 " +
+        //     mappedRecord["prefecture"] +
+        //     " : " +
+        //     mappedRecord["category"],
+        // });
       }
-      i++;
-    }
-    for (const record of records) {
-      let correctedRecord = {};
-      Object.entries(record).forEach(([key, value], index) => {
-        if (
-          headerRow[index] &&
-          headerRow[index] !== "" &&
-          headerRow[index] !== undefined &&
-          headerRow[index] !== null
-        ) {
-          correctedRecord[headerRow[index]] = value;
-        }
-      });
-      const mappedRecord = {};
-      Object.keys(correctedRecord).forEach((key) => {
-        let newKey = key;
-        if (key === "電話番号") newKey = "phone";
-        if (key === "会社名" || key === "企業名") newKey = "company";
-        if (/url/i.test(key)) newKey = "url";
-        if (key === "カテゴリ") newKey = "category";
-        if (key === "都道府県") newKey = "prefecture";
-        if (key === "市区町村") newKey = "city";
-        if (key === "住所") newKey = "address";
-        if (key === "郵便番号") newKey = "postNum";
-        if (/fax/i.test(key)) newKey = "fax";
-        if (key === "メールアドレス") newKey = "email";
-        mappedRecord[newKey] = correctedRecord[key];
-      });
       await prisma.RedStoreItem.create({
         data: {
           url: mappedRecord["url"],
           company: mappedRecord["company"],
           category: mappedRecord["category"],
           phone: mappedRecord["phone"],
-          address: `${mappedRecord["prefecture"] ?? ""} ${
-            mappedRecord["city"] ?? ""
-          } ${mappedRecord["address"] ?? ""}`,
+          address: `${mappedRecord["prefecture"] ?? ""} ${mappedRecord["city"] ?? ""} ${mappedRecord["address"] ?? ""}`,
           postNum: mappedRecord["postNum"],
           fax: mappedRecord["fax"],
         },
       });
+      i++;
     }
+    // for (const record of records) {
+    //   let correctedRecord = {};
+    //   Object.entries(record).forEach(([key, value], index) => {
+    //     if (
+    //       headerRow[index] &&bizmatch-333
+    //       headerRow[index] !== "" &&
+    //       headerRow[index] !== undefined &&
+    //       headerRow[index] !== null
+    //     ) {
+    //       correctedRecord[headerRow[index]] = value;
+    //     }
+    //   });
+    //   const mappedRecord = {};
+    //   Object.keys(correctedRecord).forEach((key) => {
+    //     let newKey = key;
+    //     if (key === "電話番号") newKey = "phone";
+    //     if (key === "会社名" || key === "企業名") newKey = "company";
+    //     if (/url/i.test(key)) newKey = "url";
+    //     if (key === "カテゴリ") newKey = "category";
+    //     if (key === "都道府県") newKey = "prefecture";
+    //     if (key === "市区町村") newKey = "city";
+    //     if (key === "住所") newKey = "address";
+    //     if (key === "郵便番号") newKey = "postNum";
+    //     if (/fax/i.test(key)) newKey = "fax";
+    //     if (key === "メールアドレス") newKey = "email";
+    //     mappedRecord[newKey] = correctedRecord[key];
+    //   });
+    //   await prisma.RedStoreItem.create({
+    //     data: {
+    //       url: mappedRecord["url"],
+    //       company: mappedRecord["company"],
+    //       category: mappedRecord["category"],
+    //       phone: mappedRecord["phone"],
+    //       address: `${mappedRecord["prefecture"] ?? ""} ${
+    //         mappedRecord["city"] ?? ""
+    //       } ${mappedRecord["address"] ?? ""}`,
+    //       postNum: mappedRecord["postNum"],
+    //       fax: mappedRecord["fax"],
+    //     },
+    //   });
+    // }
     res
       .status(200)
-      .json({ message: "File uploaded and processed successfully" });
+      .json({ 
+        message: "File uploaded and processed successfully",
+        inserted: i,
+        duplicatesSkipped: skippedDuplicates,
+        invalidSkipped: skippedInvalid,
+      });
   } catch (error) {
     console.error("Error processing CSV file:", error);
     return res.status(500).json({ error: "Failed to process CSV file" });
