@@ -1053,7 +1053,7 @@ app.post("/api/add_request_red", async (req, res) => {
     const existingRequests = await prisma.requestRed.findMany({
       where: { userId },
     });
-    
+
     const isDuplicate = existingRequests.some((item) => {
       return (
         normalizeObject(item.areaSelection) === normalizedArea &&
@@ -1100,20 +1100,20 @@ app.post("/api/add_request_red", async (req, res) => {
         },
       });
       if (chatworkClient) {
-//         try {
-//           const chatwork = new Chatwork(chatworkClient.chatwork_token);
-//           const workSelectionText = Object.entries(tp_workSelection)
-//             .map(([category, items]) => `${category}: ${items.join(', ')}`)
-//             .join('\n');
-          
-//           await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
-// クライアント名：${projectName}
-// リスト区分：
-// ${workSelectionText}
-// `);
-//         } catch (error) {
-//           console.error('Failed to send Chatwork notification:', error);
-//         }
+        //         try {
+        //           const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        //           const workSelectionText = Object.entries(tp_workSelection)
+        //             .map(([category, items]) => `${category}: ${items.join(', ')}`)
+        //             .join('\n');
+
+        //           await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+        // クライアント名：${projectName}
+        // リスト区分：
+        // ${workSelectionText}
+        // `);
+        //         } catch (error) {
+        //           console.error('Failed to send Chatwork notification:', error);
+        //         }
       }
     } else {
       const chatworkClient = await prisma.chatworkClient.findFirst({
@@ -1216,21 +1216,21 @@ app.get("/api/requestLists", async (req, res) => {
       const redItems = [];
       let totalRequestedItems = 0;
       let registeredItems = 0;
-      
+
       const tp_areaSelection = request.areaSelection;
       const tp_workSelection = request.workSelection;
-      
+
       Object.keys(tp_areaSelection).forEach((areaKey) => {
         tp_areaSelection[areaKey].forEach((area) => {
           Object.keys(tp_workSelection).forEach((categoryKey) => {
             tp_workSelection[categoryKey].forEach((item) => {
               totalRequestedItems++; // Count every requested combination
-              
-              const foundItem = redStoreItems.find((redItem) => 
+
+              const foundItem = redStoreItems.find((redItem) =>
                 redItem.category === item &&
                 redItem.address.includes(area.trim())
               );
-              
+
               if (foundItem) {
                 registeredItems++; // Count registered items
                 redItems.push(foundItem);
@@ -1239,7 +1239,7 @@ app.get("/api/requestLists", async (req, res) => {
           });
         });
       });
-      
+
       // Only set completeState = 2 if ALL requested items are registered
       if (totalRequestedItems > 0 && registeredItems === totalRequestedItems) {
         request.completeState = 2;
@@ -1540,13 +1540,13 @@ app.post("/api/requestLists_mana", async (req, res) => {
 
 app.post("/api/requestLists_red", async (req, res) => {
   const { userId } = req.body.params;
-  const token = req.body.headers.Authorization?.split(" ")[1]; // Extract token from Authorization header
+  const token = req.body.headers.Authorization?.split(" ")[1];
   if (!token) {
     return res.status(401).json({ message: "Authorization token required." });
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET); // Validate and decode token
+    const decoded = jwt.verify(token, JWT_SECRET);
     if (!decoded || decoded.id !== userId) {
       return res.status(401).json({ message: "Invalid token." });
     }
@@ -1565,109 +1565,166 @@ app.post("/api/requestLists_red", async (req, res) => {
         .json({ error: "This is allowed only for a manager" });
     }
 
-    const requestsRed = await prisma.requestRed.findMany({
-      where: {
-        OR: [
-          {
-            completeState: {
-              not: 0,
+    // Parallel database queries - use select to fetch only needed fields (reduces memory & network transfer)
+    const [requestsRed, redStoreItems, noMatchFound] = await Promise.all([
+      prisma.requestRed.findMany({
+        where: {
+          OR: [
+            {
+              completeState: {
+                not: 0,
+              },
             },
-          },
-          {
-            cancelState: 1,
-          },
-        ],
-      },
-      include: {
-        user: true, // Include the related user data
-      },
-    });
+            {
+              cancelState: 1,
+            },
+          ],
+        },
+        select: {
+          areaSelection: true,
+          workSelection: true,
+          createdAt: true,
+        },
+      }),
+      prisma.redStoreItem.findMany({
+        select: {
+          category: true,
+          address: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.noMatchItem.findMany({
+        select: {
+          bigCategory: true,
+          smallCategory: true,
+          area: true,
+          updatedAt: true,
+        },
+      }),
+    ]);
 
-    const combinedRequests = [
-      ...requestsRed.map((request) => ({ ...request, category: "レッド" })),
-    ];
+    // Build optimized lookup structures
+    // Map: category -> Map<address, item> for fast exact/substring matching
+    const redStoreItemsByCategory = new Map();
+    
+    for (const redItem of redStoreItems) {
+      const cat = redItem.category;
+      const addr = redItem.address.trim();
+      
+      if (!redStoreItemsByCategory.has(cat)) {
+        redStoreItemsByCategory.set(cat, new Map());
+      }
+      
+      const addrMap = redStoreItemsByCategory.get(cat);
+      // Store the item, allowing multiple items with same address (last one wins)
+      addrMap.set(addr, redItem);
+    }
 
-    const redItems = [];
-    const redStoreItems = await prisma.redStoreItem.findMany();
+    // Build lookup Map for noMatch items - O(1) lookup with trimmed area
+    const noMatchMap = new Map();
+    for (const noMatchItem of noMatchFound) {
+      const key = `${noMatchItem.bigCategory}|${noMatchItem.smallCategory}|${noMatchItem.area.trim()}`;
+      noMatchMap.set(key, noMatchItem);
+    }
 
-    combinedRequests.forEach((request) => {
+    // Flatten all combinations first (single pass through nested structures)
+    // This reduces nested loop complexity and allows batch processing
+    const itemsToProcess = [];
+    for (const request of requestsRed) {
       const tp_areaSelection = request.areaSelection;
       const tp_workSelection = request.workSelection;
-      // let i=0;
-      Object.keys(tp_areaSelection).forEach((areaKey) => {
-        tp_areaSelection[areaKey].forEach((area) => {
-          Object.keys(tp_workSelection).forEach((categoryKey) => {
-            tp_workSelection[categoryKey].forEach((item) => {
-              const itemFound = redStoreItems.find(
-                (redItem) =>
-                  redItem.category === item &&
-                  redItem.address.includes(area.trim())
-              );
-              redItems.push({
-                // requestId: request.id,
+      
+      // Cache Object.keys() results to avoid repeated calls
+      const areaKeys = Object.keys(tp_areaSelection);
+      const categoryKeys = Object.keys(tp_workSelection);
+
+      for (const areaKey of areaKeys) {
+        const areas = tp_areaSelection[areaKey];
+        for (const area of areas) {
+          const trimmedArea = area.trim();
+          for (const categoryKey of categoryKeys) {
+            const items = tp_workSelection[categoryKey];
+            for (const item of items) {
+              itemsToProcess.push({
                 bigCategory: categoryKey,
                 smallCategory: item,
                 area: area,
-                state: itemFound ? "登録済み" : "未登録", // Use ternary for cleaner code
-                updatedDate: itemFound
-                  ? itemFound.updatedAt
-                  : request.createdAt,
+                trimmedArea: trimmedArea,
+                createdAt: request.createdAt,
               });
-            });
-          });
+            }
+          }
+        }
+      }
+    }
+
+    // Use Map to prevent duplicates - key: "bigCategory|smallCategory|area"
+    const redItemsMap = new Map();
+
+    // Process all items in batch with optimized lookups
+    for (const itemData of itemsToProcess) {
+      const { bigCategory, smallCategory, area, trimmedArea, createdAt } = itemData;
+      const itemKey = `${bigCategory}|${smallCategory}|${trimmedArea}`;
+      
+      // Check noMatch first (O(1) lookup)
+      const noMatchItem = noMatchMap.get(itemKey);
+      if (noMatchItem) {
+        redItemsMap.set(itemKey, {
+          bigCategory,
+          smallCategory,
+          area,
+          state: "該当なし",
+          updatedDate: noMatchItem.updatedAt,
         });
+        continue;
+      }
+
+      // Optimized address matching: check category exists first, then try exact/substring match
+      const addrMap = redStoreItemsByCategory.get(smallCategory);
+      let itemFound = null;
+      
+      if (addrMap) {
+        // Try exact match first (O(1))
+        if (addrMap.has(trimmedArea)) {
+          itemFound = addrMap.get(trimmedArea);
+        } else {
+          // Substring match - iterate through addresses (but only this category's addresses)
+          for (const [address, redItem] of addrMap.entries()) {
+            if (address.includes(trimmedArea) || trimmedArea.includes(address)) {
+              itemFound = redItem;
+              break; // Found first match, stop searching
+            }
+          }
+        }
+      }
+
+      const state = itemFound ? "登録済み" : "未登録";
+      redItemsMap.set(itemKey, {
+        bigCategory,
+        smallCategory,
+        area,
+        state,
+        updatedDate: itemFound ? itemFound.updatedAt : createdAt,
       });
-    });
+    }
 
-    // async function removeDuplicates() {
-    //   const allItems = await prisma.redStoreItem.findMany();
-    
-    //   const seen = new Map();
-    //   const idsToKeep = new Set();
-    
-    //   for (const item of allItems) {
-    //     const key = `${item.category}||${item.address}`;
-    //     if (!seen.has(key)) {
-    //       seen.set(key, item.id);
-    //       idsToKeep.add(item.id);
-    //     }
-    //   }
-    
-    //   const idsToDelete = allItems
-    //     .filter((item) => !idsToKeep.has(item.id))
-    //     .map((item) => item.id);
-    
-    //   if (idsToDelete.length > 0) {
-    //     await prisma.redStoreItem.deleteMany({
-    //       where: {
-    //         id: { in: idsToDelete },
-    //       },
-    //     });
-    //     console.log(`Deleted ${idsToDelete.length} duplicate items.`);
-    //   } else {
-    //     console.log('No duplicates found to delete.');
-    //   }
-    // }
-    // await removeDuplicates();
+    // Add any no match items that weren't processed from requests
+    for (const noMatchItem of noMatchFound) {
+      const key = `${noMatchItem.bigCategory}|${noMatchItem.smallCategory}|${noMatchItem.area.trim()}`;
+      if (!redItemsMap.has(key)) {
+        redItemsMap.set(key, {
+          bigCategory: noMatchItem.bigCategory,
+          smallCategory: noMatchItem.smallCategory,
+          area: noMatchItem.area,
+          state: "該当なし",
+          updatedDate: noMatchItem.updatedAt,
+        });
+      }
+    }
 
+    // Convert Map to array
+    const redItems = Array.from(redItemsMap.values());
     res.status(200).json({ redItems });
-    // const unregisteredItems = redItems.filter((item) => item.state === "未登録");
-
-    // // Delete corresponding requestRed entries from DB
-    // if (unregisteredItems.length > 0) {
-    //   await prisma.requestRed.deleteMany({
-    //     where: {
-    //       id: {
-    //         in: unregisteredItems.map((i) => i.requestId),
-    //       },
-    //     },
-    //   });
-    // }
-
-    // res.status(200).json({ 
-    //   deletedCount: unregisteredItems.length,
-    //   redItems
-    // });
   } catch (error) {
     console.error("Error fetching requests:", error);
     res
@@ -1763,20 +1820,20 @@ app.put("/api/update_request_pink/:id", async (req, res) => {
       },
     });
     if (completeState == 1) {
-        requestAt = new Date();
-          const chatworkClient = await prisma.chatworkClient.findFirst({
-            where: {
-              userId: 1,
-            },
-          });
-          if (chatworkClient) {
-            const chatwork = new Chatwork(chatworkClient.chatwork_token);
-            await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+      requestAt = new Date();
+      const chatworkClient = await prisma.chatworkClient.findFirst({
+        where: {
+          userId: 1,
+        },
+      });
+      if (chatworkClient) {
+        const chatwork = new Chatwork(chatworkClient.chatwork_token);
+        await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
 クライアント名：${updatedRequestPink.user.name}
 リスト区分：ピンク
 `);
-          }
       }
+    }
     res.status(200).json(updatedRequestPink);
   } catch (error) {
     console.error("Error updating request:", error);
@@ -1946,20 +2003,20 @@ app.put("/api/update_request_red/:id", async (req, res) => {
       },
     });
     if (chatworkClient) {
-//       try {
-//         const chatwork = new Chatwork(chatworkClient.chatwork_token);
-//         const workSelectionText = Object.entries(tp_workSelection)
-//           .map(([category, items]) => `${category}: ${items.join(', ')}`)
-//           .join('\n');
-        
-//         await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
-// クライアント名：${projectName}
-// リスト区分：
-// ${workSelectionText}
-// `);
-//       } catch (error) {
-//         console.error('Failed to send Chatwork notification:', error);
-//       }
+      //       try {
+      //         const chatwork = new Chatwork(chatworkClient.chatwork_token);
+      //         const workSelectionText = Object.entries(tp_workSelection)
+      //           .map(([category, items]) => `${category}: ${items.join(', ')}`)
+      //           .join('\n');
+
+      //         await chatwork.sendMessage(chatworkClient.room_id, `リストの依頼があります。
+      // クライアント名：${projectName}
+      // リスト区分：
+      // ${workSelectionText}
+      // `);
+      //       } catch (error) {
+      //         console.error('Failed to send Chatwork notification:', error);
+      //       }
     } else {
       const chatworkClient = await prisma.chatworkClient.findFirst({
         where: {
@@ -2193,7 +2250,7 @@ app.post("/api/upload-csv", upload.single("file"), async (req, res) => {
     console.error("Error processing CSV:", error);
     res.status(500).json({ error: "Error processing CSV file" });
   } finally {
-    fs.unlink(filePath, () => {}); // Remove temporary file
+    fs.unlink(filePath, () => { }); // Remove temporary file
   }
 });
 
@@ -2260,8 +2317,8 @@ app.post("/api/upload-csv-file", upload.single("file"), async (req, res) => {
     //     }
     //   }
     // } else {
-      // --- Not ZIP: use frontend's listCount ---
-      rowCount = parseInt(req.body.listCount, 10) || 0;
+    // --- Not ZIP: use frontend's listCount ---
+    rowCount = parseInt(req.body.listCount, 10) || 0;
     // }
 
     const deliveryAt = new Date();
@@ -2394,6 +2451,7 @@ app.post("/api/upload-red-file", upload.single("file"), async (req, res) => {
     let i = 0;
     let skippedDuplicates = 0;
     let skippedInvalid = 0;
+    let skippedNoMatch = 0;
     for (const record of records) {
       let correctedRecord = {};
       Object.entries(record).forEach(([key, value], index) => {
@@ -2425,9 +2483,8 @@ app.post("/api/upload-red-file", upload.single("file"), async (req, res) => {
       const existingItem = await prisma.RedStoreItem.findFirst({
         where: {
           category: mappedRecord["category"],
-          address: `${mappedRecord["prefecture"] ?? ""} ${
-            mappedRecord["city"] ?? ""
-          } ${mappedRecord["address"] ?? ""}`,
+          address: `${mappedRecord["prefecture"] ?? ""} ${mappedRecord["city"] ?? ""
+            } ${mappedRecord["address"] ?? ""}`,
         }, // Assuming 'url' is the unique column
       });
       if (existingItem) {
@@ -2440,8 +2497,8 @@ app.post("/api/upload-red-file", upload.single("file"), async (req, res) => {
       const checkValueInOptions = (data, value) => {
         // Normalize the input value by replacing ㆍ with ・
         const normalizedValue = value.replace(/ㆍ/g, '・');
-        
-        return data.some((item) => 
+
+        return data.some((item) =>
           item.options.some(option => {
             // Normalize each option by replacing ㆍ with ・
             const normalizedOption = option.replace(/ㆍ/g, '・');
@@ -2468,6 +2525,20 @@ app.post("/api/upload-red-file", upload.single("file"), async (req, res) => {
         //     " : " +
         //     mappedRecord["category"],
         // });
+      }
+      const noMatchItems = await prisma.noMatchItem.findMany();
+      if (noMatchItems.length > 0) {
+        let foundInNoMatch = false;
+        for (const noMatchItem of noMatchItems) {
+          if (noMatchItem.smallCategory === mappedRecord["category"] && noMatchItem.area === mappedRecord["prefecture"]) {
+            foundInNoMatch = true;
+            break;
+          }
+        }
+        if (foundInNoMatch) {
+          skippedNoMatch++;
+          continue;
+        }
       }
       await prisma.RedStoreItem.create({
         data: {
@@ -2525,11 +2596,12 @@ app.post("/api/upload-red-file", upload.single("file"), async (req, res) => {
     // }
     res
       .status(200)
-      .json({ 
+      .json({
         message: "File uploaded and processed successfully",
         inserted: i,
         duplicatesSkipped: skippedDuplicates,
         invalidSkipped: skippedInvalid,
+        noMatchItems: skippedNoMatch,
       });
   } catch (error) {
     console.error("Error processing CSV file:", error);
@@ -2773,6 +2845,129 @@ app.post("/api/admin/settings/chatwork/save", async (req, res) => {
       return res.status(401).json({ message: "Token expired." });
     }
     return res.status(500).json({ error: "Failed to save chatwork settings" });
+  }
+});
+
+app.post("/api/update_red_item_status", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "Authorization token required." });
+    }
+
+    // Verify the token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (!decoded) {
+      return res.status(401).json({ message: "Invalid token." });
+    }
+
+    // Check if the user has the required role
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id },
+    });
+
+    if (!user || user.role === 0) {
+      return res.status(403).json({ message: "管理者権限が必要です" });
+    }
+
+    const { workSelection, areaSelection, status } = req.body;
+
+    if (!workSelection || !areaSelection || !status) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Create or update NoMatchItems entries
+    const results = [];
+
+    const promises = [];
+    for (const areaKey of Object.keys(areaSelection)) {
+      for (const area of areaSelection[areaKey]) {
+        for (const categoryKey of Object.keys(workSelection)) {
+          for (const item of workSelection[categoryKey]) {
+            if (status === "該当なし") {
+              // Add to NoMatchItems table
+              const existingItem = await prisma.noMatchItem.findFirst({
+                where: {
+                  bigCategory: categoryKey,
+                  smallCategory: item,
+                  area: area.trim(),
+                },
+              });
+              if (existingItem) {
+                results.push({ category: item, area: area.trim(), action: "already_exists" });
+                continue;
+              }
+              const existingRedItem = await prisma.redStoreItem.findFirst({
+                where: {
+                  category: item,
+                  address: { startsWith: area.trim().slice(0, 4), mode: "insensitive" },
+                },
+              });
+              if (existingRedItem) {
+                results.push({ category: item, area: area.trim(), action: "already_red_record" });
+                continue;
+              }
+              if (!existingItem && !existingRedItem) {
+                const promise = prisma.noMatchItem.create({
+                  data: {
+                    bigCategory: categoryKey,
+                    smallCategory: item,
+                    area: area.trim(),
+                  },
+                }).then(() => {
+                  results.push({ bigCategory: categoryKey, smallCategory: item, area: area.trim(), action: "marked_as_no_match" });
+                }).catch((error) => {
+                  console.error("Error adding no match item:", error);
+                  results.push({ category: item, area: area.trim(), action: "error", error: error.message });
+                });
+                promises.push(promise);
+              }
+            } else if (status === "未登録") {
+              // Remove from NoMatchItems table
+              const existingItem = await prisma.noMatchItem.findFirst({
+                where: {
+                  bigCategory: categoryKey,
+                  smallCategory: item,
+                  area: area.trim(),
+                },
+              });
+              if (existingItem) {
+                const promise = prisma.noMatchItem.delete({
+                  where: {
+                    id: existingItem.id,
+                  },
+                }).then(() => {
+                  results.push({ bigCategory: categoryKey, smallCategory: item, area: area.trim(), action: "marked_as_unregistered" });
+                }).catch((error) => {
+                  console.error("Error removing no match item:", error);
+                  results.push({ bigCategory: categoryKey, smallCategory: item, area: area.trim(), action: "error", error: error.message });
+                });
+                promises.push(promise);
+              } else {
+                results.push({ bigCategory: categoryKey, smallCategory: item, area: area.trim(), action: "not_found" });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Wait for all operations to complete
+    await Promise.all(promises);
+
+    return res.status(200).json({
+      message: "Status updated successfully",
+      results: results
+    });
+  } catch (error) {
+    console.error("Error updating red item status:", error);
+    if (error.name === "JsonWebTokenError") {
+      return res.status(401).json({ message: "Invalid token." });
+    }
+    if (error.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Token expired." });
+    }
+    return res.status(500).json({ error: "Failed to update status" });
   }
 });
 
