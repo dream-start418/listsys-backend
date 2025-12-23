@@ -8,175 +8,182 @@ datasource db {
 }
 
 model User {
-  id                 Int       @id @default(autoincrement())
+  id                 Int             @id @default(autoincrement())
   name               String
-  email              String    @unique
-  phone              String    @default("")
+  email              String          @unique
+  phone              String          @default("")
   password           String
-  passwordResetToken String    @default("")
-  role               Int       @default(0)
-  planId             Int       @default(0)
-  createdAt          DateTime  @default(now())
-  requests           Request[] @relation("UserRequests") // Relation with requests
-  requestsBlue       RequestBlue[] @relation("UserRequestBlues")
-  requestsYellow     RequestYellow[] @relation("UserRequestYellows")
-  requestsPink       RequestPink[] @relation("UserRequestPinks")
-  requestsRed        RequestRed[] @relation("UserRequestReds")
-  clientCost         CostClient? @relation("UserCostClient")
+  passwordResetToken String          @default("")
+  role               Int             @default(0)
+  planId             Int             @default(0)
+  createdAt          DateTime        @default(now())
+  contractId         String?         @unique
   chatworkClient     ChatworkClient? @relation("UserChatworkClient")
-
-  // Relation with Client (Optional)
-  contractId         String?   @unique
-  client             Client?   @relation(fields: [contractId], references: [contractId])
+  clientCost         CostClient?     @relation("UserCostClient")
+  requests           Request[]       @relation("UserRequests")
+  requestsBlue       RequestBlue[]   @relation("UserRequestBlues")
+  requestsPink       RequestPink[]   @relation("UserRequestPinks")
+  requestsRed        RequestRed[]    @relation("UserRequestReds")
+  requestsYellow     RequestYellow[] @relation("UserRequestYellows")
+  client             Client?         @relation(fields: [contractId], references: [contractId])
 }
 
 model Client {
-  id              Int      @id @default(autoincrement())
-  contractId      String   @unique
-  memo            String   @default("")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  user            User?    // Optional relation with User
+  id         Int      @id @default(autoincrement())
+  contractId String   @unique
+  memo       String   @default("")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User?
 }
 
 model Request {
-  id            Int      @id @default(autoincrement())
-  requestRandId String   @unique
+  id            Int       @id @default(autoincrement())
+  requestRandId String    @unique
   projectName   String
-  wishNum       Int     @default(0)
+  wishNum       Int       @default(0)
   mainCondition Json
   subCondition  Json
   areaSelection Json
   areaMemo      String
   completeState Int
-  cancelState   Int      @default(0)
+  cancelState   Int       @default(0)
   userId        Int
-  user          User     @relation("UserRequests", fields: [userId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt @default(now())
-  requestAt     DateTime? // Made optional
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+  requestAt     DateTime?
   deliveryAt    DateTime?
-  filePath      String?  @default("")// File path of the uploaded CSV
-  fileName      String?  @default("")// File path of the uploaded CSV
-  listCount     Int      @default(0)
+  filePath      String?   @default("")
+  fileName      String?   @default("")
+  listCount     Int       @default(0)
+  user          User      @relation("UserRequests", fields: [userId], references: [id])
 }
 
 model RequestBlue {
-  id            Int      @id @default(autoincrement())
-  requestRandId String   @unique
-  projectName   String
-  wishNum       Int     @default(0)
-  tags  String[]  @default([])
+  id              Int       @id @default(autoincrement())
+  requestRandId   String    @unique
+  projectName     String
+  wishNum         Int       @default(0)
+  tags            String[]  @default([])
   detailCondition Json
-  areaSelection Json
-  areaMemo      String
-  completeState Int
-  cancelState   Int      @default(0)
-  userId        Int
-  user          User     @relation("UserRequestBlues", fields: [userId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt @default(now())
-  requestAt     DateTime? // Made optional
-  deliveryAt    DateTime?
-  filePath      String?  @default("")// File path of the uploaded CSV
-  fileName      String?  @default("")// File path of the uploaded CSV
-  listCount     Int      @default(0)
+  areaSelection   Json
+  areaMemo        String
+  completeState   Int
+  cancelState     Int       @default(0)
+  userId          Int
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @default(now()) @updatedAt
+  requestAt       DateTime?
+  deliveryAt      DateTime?
+  filePath        String?   @default("")
+  fileName        String?   @default("")
+  listCount       Int       @default(0)
+  user            User      @relation("UserRequestBlues", fields: [userId], references: [id])
 }
 
 model RequestYellow {
-  id            Int      @id @default(autoincrement())
-  requestRandId String   @unique
+  id            Int       @id @default(autoincrement())
+  requestRandId String    @unique
   projectName   String
-  wishNum       Int     @default(0)
+  wishNum       Int       @default(0)
   portalSite    String
   areaSelection Json
   areaMemo      String
   completeState Int
-  cancelState   Int      @default(0)
+  cancelState   Int       @default(0)
   userId        Int
-  user          User     @relation("UserRequestYellows", fields: [userId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt @default(now())
-  requestAt     DateTime? // Made optional
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+  requestAt     DateTime?
   deliveryAt    DateTime?
-  filePath      String?  @default("")// File path of the uploaded CSV
-  fileName      String?  @default("")// File path of the uploaded CSV
-  listCount     Int      @default(0)
+  filePath      String?   @default("")
+  fileName      String?   @default("")
+  listCount     Int       @default(0)
+  user          User      @relation("UserRequestYellows", fields: [userId], references: [id])
 }
 
 model RequestPink {
-  id            Int      @id @default(autoincrement())
-  requestRandId String   @unique
+  id            Int       @id @default(autoincrement())
+  requestRandId String    @unique
   projectName   String
-  wishNum       Int     @default(0)
+  wishNum       Int       @default(0)
   areaSelection Json
   areaMemo      String
   completeState Int
-  cancelState   Int      @default(0)
+  cancelState   Int       @default(0)
   userId        Int
-  user          User     @relation("UserRequestPinks", fields: [userId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt @default(now())
-  requestAt     DateTime? // Made optional
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+  requestAt     DateTime?
   deliveryAt    DateTime?
-  filePath      String?  @default("")// File path of the uploaded CSV
-  fileName      String?  @default("")
-  listCount     Int      @default(0)
+  filePath      String?   @default("")
+  fileName      String?   @default("")
+  listCount     Int       @default(0)
+  user          User      @relation("UserRequestPinks", fields: [userId], references: [id])
 }
 
 model RequestRed {
-  id            Int      @id @default(autoincrement())
-  requestRandId String   @unique
+  id            Int       @id @default(autoincrement())
+  requestRandId String    @unique
   projectName   String
-  wishNum       Int     @default(0)
+  wishNum       Int       @default(0)
   workSelection Json
   areaSelection Json
   areaMemo      String
   completeState Int
-  cancelState   Int      @default(0)
+  cancelState   Int       @default(0)
   userId        Int
-  user          User     @relation("UserRequestReds", fields: [userId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
   requestAt     DateTime?
   deliveryAt    DateTime?
-  filePath      String?  @default("")
-  fileName      String?  @default("")
-  listCount     Int      @default(0)
+  filePath      String?   @default("")
+  fileName      String?   @default("")
+  listCount     Int       @default(0)
+  user          User      @relation("UserRequestReds", fields: [userId], references: [id])
 }
 
 model RedStoreItem {
-  id            Int       @id @default(autoincrement())
-  company       String
-  url           String
-  category      String
-  phone         String
-  address       String
-  postNum       String
-  fax           String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt @default(now())
+  id        Int      @id @default(autoincrement())
+  company   String
+  url       String
+  category  String
+  phone     String
+  address   String
+  postNum   String
+  fax       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 }
 
 model CostClient {
-  id Int @id @default(autoincrement())
-  red_price Int
-  blue_price Int
-  green_price Int
+  id           Int      @id @default(autoincrement())
+  red_price    Int
+  blue_price   Int
+  green_price  Int
   yellow_price Int
-  pink_price Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt @default(now())
-  user          User     @relation("UserCostClient", fields: [userId], references: [id])
-  userId        Int @unique
+  pink_price   Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+  userId       Int      @unique
+  user         User     @relation("UserCostClient", fields: [userId], references: [id])
 }
 
 model ChatworkClient {
-  id Int @id @default(autoincrement())
-  room_id String
+  id             Int      @id @default(autoincrement())
+  room_id        String
   chatwork_token String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt @default(now())
-  user User    @relation("UserChatworkClient", fields: [userId], references: [id])
-  userId  Int  @unique
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @default(now()) @updatedAt
+  userId         Int      @unique
+  user           User     @relation("UserChatworkClient", fields: [userId], references: [id])
+}
+
+model NoMatchItem {
+  id            Int      @id @default(autoincrement())
+  bigCategory   String
+  smallCategory String
+  area          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
 }
