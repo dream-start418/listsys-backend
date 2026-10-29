@@ -10,7 +10,6 @@ const iconv = require("iconv-lite");
 const path = require("path");
 const Chatwork = require("./chatwork");
 const AdmZip = require("adm-zip");
-const xlsx = require("xlsx");
 
 require("dotenv").config();
 const cors = require("cors");
